@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>.</title>
+    <meta charset="utf-8" />
+    <script src="//code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <script src="//ajaxorg.github.io/ace-builds/src-min/ace.js" charset="utf-8"></script>
+    <style>
+    /**
+    .--------------------------.
+    |.------------------------.|
+    || Query                  ||
+    |'------------------------'|
+    |.------------------------.|
+    || Errors                 ||
+    |'------------------------'|
+    |.------------------------.|
+    ||.----------..----------.||
+    |||.-------. ||.--------.|||
+    |||'-------' ||'--------'|||
+    |||.--------.||.--------.|||
+    |||| ReqBdy |||| ResBdy ||||
+    ||||        ||||        ||||
+    |||'--------'||'--------'|||
+    ||'----------''----------'||
+    |'------------------------'|
+    '--------------------------'
+     */
+    html, body { height: 100%; }
+    body { display:flex; flex-flow: column wrap; margin:auto auto; max-width: 1280px; }
+
+    #query-panel { display: flex; flex-flow: row no-wrap; height: 40px; }
+    #query-url { width: 100%; }
+
+    #ajax-strobe { margin: auto; width: 16px; display:none; }
+    #error-panel { margin: 20px 0; color: red; font-weight: bold; }
+
+
+    #data-panel { flex: 1; display:flex; flex-flow: row nowrap; }
+    div.data-panel-col, div.data-panel-col > div:nth-child(2) { flex: 1; display:flex; flex-flow: column wrap; border: solid 1px blue; }
+    div.data-panel-col > div:nth-child(2) > div { flex: 1; }
+    #data-panel h4 { padding: 0; margin: 0; }
+    #request-headers, #response-headers { flex: 0; min-height: 6em; margin-top: 2px; }
+
+    </style>
+    <script>
+      var ajaxing = false
+      var mode_map = {
+        'application/json': {mode: 'ace/mode/json', formatter: (data) => {return JSON.stringify(JSON.parse(data), null, '\t');}},
+        'text/html': {mode: 'ace/mode/html', formatter: (data) => {return data;}},
+        '*': {mode: 'ace/mode/text', formatter: (data) => {return data;}},
+      }
+
+      jQuery(document).ready(init)
+
+      function init() {
+        console.log("Ready")
+        jQuery('#query-submit').on('click', _load)
+        jQuery(document).ajaxStart(_ajaxStart)
+        jQuery(document).ajaxStop(_ajaxStop)
+        jQuery('#query-url').keypress((e) => {if(e.key == "Enter"){_load();}})
+        jQuery('#request-body').keypress((e) => {if(e.key == "Enter" && e.ctrlKey){_load();}})
+        _resetUi()
+        request_textarea = ace.edit("request-body");
+        request_textarea.setTheme("ace/theme/monokai");
+        request_textarea.getSession().setMode("ace/mode/json");
+        request_headers_textarea = ace.edit("request-headers");
+        request_headers_textarea.setTheme("ace/theme/dawn");
+        request_headers_textarea.getSession().setMode("ace/mode/ini");
+        response_textarea = ace.edit("response-body");
+        response_textarea.setTheme("ace/theme/monokai");
+        response_textarea.getSession().setMode("ace/mode/html");
+        response_headers_textarea = ace.edit("response-headers");
+        response_headers_textarea.setTheme("ace/theme/dawn");
+        response_headers_textarea.getSession().setMode("ace/mode/ini");
+      }
+
+      function _resetUi() {
+        jQuery('#error-panel').html('').css('display', 'none');
+        jQuery('#ajax-strobe').fadeOut(0);
+      }
+
+      function _ajaxStart() {
+        _resetUi()
+        jQuery('#ajax-strobe').fadeIn(100)
+      }
+
+      function _ajaxStop() {
+        jQuery('#ajax-strobe').fadeOut(0);
+      }
+
+      function _load() {
+        if(ajaxing) {
+          return
+        }
+        var method = jQuery('#query-method').val()
+        var url = jQuery('#query-url').val()
+        var body = request_textarea.getValue()
+        load(method, url, body)
+      }
+
+      function load(method, url, body) {
+        console.log('Query:', method, url, body)
+		    var ajaxSettings = {
+			    type: method,
+			    dataType: 'text',
+			    crossDomain: true,
+			    url: url,
+			    data: body,
+			    error: function(jqXHR, textStatus, errorThrown){_receiveError(jqXHR, textStatus, errorThrown);},
+			    success: _receive,
+			    complete: function() { ajaxing = false; }
+		    };
+		    jQuery.ajax(ajaxSettings);
+		    ajaxing = true
+      }
+
+      function _receive(data, textStatus, jqXHR) {
+        //console.log(data)
+        headers = jqXHR.getAllResponseHeaders().split('\n')
+        var _headers = {}
+        headers.forEach((n) => {var x=n.trim().split(/\s*:\s*/); _headers[x[0].toLowerCase()] = x.slice(1,).join(':');})
+        var mode = mode_map['*']
+        if(_headers['content-type']) {
+          mode = mode_map[_headers['content-type'].split(';')[0]]
+        }
+        response_textarea.getSession().setMode(mode['mode']);
+        response_textarea.setValue(mode['formatter'](data))
+        response_headers_textarea.setValue(jqXHR.getAllResponseHeaders())
+      }
+
+      function _receiveError(jqXHR, textStatus, errorThrown) {
+        console.log(jqXHR, textStatus, errorThrown)
+        jQuery('#error-panel').css('display', 'initial').fadeIn(1000).text([textStatus.toUpperCase(), errorThrown].join(' | '))
+      }
+
+      function clear() {
+      }
+
+    </script>
+  </head>
+  <body>
+    <div id='query-panel'>
+      <input type='text' id='query-url' name='query-url' />
+      <select  id='query-method' name='query-method'>
+        <option>GET</option>
+        <option>PUT</option>
+        <option>POST</option>
+        <option>PATCH</option>
+        <option>DELETE</option>
+      </select>
+      <button id='query-submit' class='btn'>&nbsp;Go&nbsp;</button>
+      <img id='ajax-strobe' src='/img/loading1.gif'/>
+    </div>
+    <div id='error-panel' class='alert alert-danger'></div>
+    <div id='data-panel'>
+      <div class='data-panel-col'>
+        <div>
+          <h4>Request Headers (one/line. Ex: X-Foo: Baz):</h4>
+          <div id='request-headers' title='Request Headers' contenteditable='true'></div>
+        </div>
+        <div>
+          <h4>Request Body (JSON):</h4>
+          <div id='request-body' title='Request Body' contenteditable='true'></div>
+        </div>
+      </div>
+      <div class='data-panel-col'>
+        <div>
+          <h4>Response Headers:</h4>
+          <div id='response-headers'>X</div>
+        </div>
+        <div>
+          <h4>Response Body:</h4>
+          <div id='response-body'></div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
