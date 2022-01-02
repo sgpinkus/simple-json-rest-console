@@ -29,7 +29,7 @@
     html, body {
       height: 100%;
     }
-    * {
+     * {
       box-sizing: border-box;
       border-radius: 0px;
     }
@@ -115,6 +115,7 @@
         response_headers_textarea = ace.edit("response-headers");
         response_headers_textarea.setTheme("ace/theme/dawn");
         response_headers_textarea.getSession().setMode("ace/mode/ini");
+        jQuery(window).on('keypress', ctrlEnterGo);
       }
 
       function _resetUi() {
@@ -128,7 +129,7 @@
       }
 
       function _ajaxStop() {
-        jQuery('#ajax-strobe').fadeOut(0);
+        jQuery('#ajax-strobe').fadeOut(0).css('display', 'none');
       }
 
       function _load() {
@@ -158,7 +159,16 @@
       }
 
       function _receive(data, textStatus, jqXHR) {
-        //console.log(data)
+        setResponse(data, jqXHR);
+      }
+
+      function _receiveError(jqXHR, textStatus, errorThrown) {
+        console.log(jqXHR, textStatus, errorThrown)
+        jQuery('#error-panel').css('display', 'initial').fadeIn(1000).text([textStatus.toUpperCase(), errorThrown].join(' | '))
+        setResponse('', jqXHR);
+      }
+
+      function setResponse(data, jqXHR) {
         headers = jqXHR.getAllResponseHeaders().split('\n')
         var _headers = {}
         headers.forEach((n) => {var x=n.trim().split(/\s*:\s*/); _headers[x[0].toLowerCase()] = x.slice(1,).join(':');})
@@ -167,16 +177,20 @@
           mode = mode_map[_headers['content-type'].split(';')[0]]
         }
         response_textarea.getSession().setMode(mode['mode']);
-        response_textarea.setValue(mode['formatter'](data))
+        response_textarea.setValue(mode['formatter'](data || jqXHR.responseText))
         response_headers_textarea.setValue(jqXHR.getAllResponseHeaders())
       }
 
-      function _receiveError(jqXHR, textStatus, errorThrown) {
-        console.log(jqXHR, textStatus, errorThrown)
-        jQuery('#error-panel').css('display', 'initial').fadeIn(1000).text([textStatus.toUpperCase(), errorThrown].join(' | '))
+      function clear() {
       }
 
-      function clear() {
+      function ctrlEnterGo(event) {
+        const { originalEvent: { code, ctrlKey } } = event;
+        if(code === 'Enter' && ctrlKey) {
+          _load();
+          return false;
+        }
+        return true;
       }
 
     </script>
@@ -191,7 +205,7 @@
         <option>PATCH</option>
         <option>DELETE</option>
       </select>
-      <button id='query-submit' class='btn'>&nbsp;Go&nbsp;</button>
+      <button id='query-submit' class='btn' title='ctrl+enter'>&nbsp;Go&nbsp;</button>
       <img id='ajax-strobe' src='/img/loading1.gif'/>
     </div>
     <div id='error-panel' class='alert alert-danger'></div>
